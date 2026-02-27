@@ -6,6 +6,17 @@ import { adminRoute } from './routes/admin.js'
 
 const app = new Hono()
 
+// Request logging middleware
+app.use('*', async (c, next) => {
+  const start = Date.now()
+  const method = c.req.method
+  const path = c.req.path
+  await next()
+  const status = c.res.status
+  const duration = Date.now() - start
+  console.log(`[HTTP] ${method} ${path} → ${status} (${duration}ms)`)
+})
+
 // Mount routes
 app.route('/webhook', webhookRoute)
 app.route('/admin', adminRoute)
