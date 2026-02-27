@@ -61,6 +61,26 @@ webhookRoute.post('/', async (c) => {
 
     console.log(`[WEBHOOK] [${timestamp}] Found route id=${route.id} name="${route.name ?? ''}" → ${route.webhookUrl}`)
 
+    // Extract credentials from URL (e.g. https://user:pass@host/path) and move
+    // them to an Authorization: Basic header. Node's fetch() rejects URLs that
+    // contain credentials directly, so we must strip them from the URL first.
+    const parsedUrl = new URL(route.webhookUrl)
+    const username = parsedUrl.username
+    const password = parsedUrl.password
+    parsedUrl.username = ''
+    parsedUrl.password = ''
+    const cleanUrl = parsedUrl.toString()
+
+    const forwardHeaders: Record<string, string> = {
+      'Content-Type': 'application/json'
+    }
+
+    if (username || password) {
+      const credentials = Buffer.from(`${decodeURIComponent(username)}:${decodeURIComponent(password)}`).toString('base64')
+      forwardHeaders['Authorization'] = `Basic ${credentials}`
+      console.log(`[WEBHOOK] [${timestamp}] Credentials found in URL — using Authorization: Basic header (user="${decodeURIComponent(username)}")`)
+    }
+
     // Add timeout via AbortController so a slow/unresponsive target
     // does not block indefinitely and cause Chatwoot retries
     const timeoutMs = parseInt(process.env.FETCH_TIMEOUT_MS || '10000')
@@ -68,27 +88,25 @@ webhookRoute.post('/', async (c) => {
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
-      console.log(`[WEBHOOK] [${timestamp}] Forwarding event="${event}" inboxId=${inboxId} → ${route.webhookUrl}`)
+      console.log(`[WEBHOOK] [${timestamp}] Forwarding event="${event}" inboxId=${inboxId} → ${cleanUrl}`)
 
-      const response = await fetch(route.webhookUrl, {
+      const response = await fetch(cleanUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: forwardHeaders,
         body: JSON.stringify(body),
         signal: controller.signal
       })
 
       if (response.ok) {
-        console.log(`[WEBHOOK] [${timestamp}] Forward success → ${route.webhookUrl} (HTTP ${response.status})`)
+        console.log(`[WEBHOOK] [${timestamp}] Forward success → ${cleanUrl} (HTTP ${response.status})`)
       } else {
-        console.error(`[WEBHOOK] [${timestamp}] Forward failed → ${route.webhookUrl} (HTTP ${response.status} ${response.statusText})`)
+        console.error(`[WEBHOOK] [${timestamp}] Forward failed → ${cleanUrl} (HTTP ${response.status} ${response.statusText})`)
       }
     } catch (fetchError) {
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        console.error(`[WEBHOOK] [${timestamp}] Forward timeout after ${timeoutMs}ms → ${route.webhookUrl}`)
+        console.error(`[WEBHOOK] [${timestamp}] Forward timeout after ${timeoutMs}ms → ${cleanUrl}`)
       } else {
-        console.error(`[WEBHOOK] [${timestamp}] Forward error → ${route.webhookUrl}:`, fetchError instanceof Error ? fetchError.message : fetchError)
+        console.error(`[WEBHOOK] [${timestamp}] Forward error → ${cleanUrl}:`, fetchError instanceof Error ? fetchError.message : fetchError)
       }
     } finally {
       clearTimeout(timer)
