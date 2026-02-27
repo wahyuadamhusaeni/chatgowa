@@ -12,7 +12,11 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
   },
-  "keywords": ["chatwoot", "webhook", "whatsapp"],
+  "keywords": [
+    "chatwoot",
+    "webhook",
+    "whatsapp"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.2",
+    "dotenv": "^17.3.1",
     "prisma": "^7.4.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
