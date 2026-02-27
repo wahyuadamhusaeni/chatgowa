@@ -711,20 +711,22 @@ Atau hapus script `build` dan `start` dari `package.json` jika memang tidak digu
 
 ## 📊 Ringkasan Bug
 
-| # | Severity | File | Deskripsi Singkat |
-|---|---|---|---|
-| 1 | 🔴 Critical | `package.json` | `dotenv` di devDependencies → crash di production |
-| 2 | 🔴 Critical | `Dockerfile` | Generated Prisma client tidak di-copy eksplisit |
-| 3 | 🟡 Medium | `prisma/schema.prisma` | Tidak ada `url` fallback di datasource |
-| 4 | 🟡 Medium | `basicAuth.ts` | Default password inkonsisten antara code & docs |
-| 5 | 🔴 Critical | `basicAuth.ts` | Password dengan karakter `:` terpotong |
-| 6 | 🟡 Medium | `webhook.ts` | `inbox_id = 0` di-ignore karena falsy check |
-| 7 | 🔴 Critical | `webhook.ts` | Tidak ada timeout pada fetch ke GoWA → hang |
-| 8 | 🟡 Medium | `Dockerfile` | CMD pakai `tsx` devDependency di production |
-| 9 | 🔴 Critical | `Dockerfile` | `db push` di build time → schema drift di production |
-| 10 | 🟡 Medium | `admin.ts` | Client-side `escapeJs` regex salah → potensi XSS |
-| M1 | ⚠️ Minor | `webhook.ts` | Tidak ada body size limit → vektor DoS |
-| M2 | ⚠️ Minor | `Dockerfile` + `package.json` | Build script tidak dipakai → misleading |
+> Semua bug di bawah telah **diperbaiki** di versi ini. ✅
+
+| # | Severity | File | Deskripsi Singkat | Status |
+|---|---|---|---|---|
+| 1 | 🔴 Critical | `package.json` | `dotenv` dipindah dari devDeps ke dependencies | ✅ Fixed |
+| 2 | 🔴 Critical | `Dockerfile` | `dist/generated/` ter-include via `COPY dist/`; `src/generated` tidak di-copy terpisah | ✅ Fixed |
+| 3 | 🟡 Medium | `prisma/schema.prisma` | Prisma 7 tidak support `url` di schema — URL hanya via `prisma.config.ts`; didokumentasikan | ✅ N/A |
+| 4 | 🟡 Medium | `basicAuth.ts` | Default password disamakan menjadi `yourpassword` di semua tempat | ✅ Fixed |
+| 5 | 🔴 Critical | `basicAuth.ts` | Parsing password menggunakan `indexOf`+`slice` (RFC 7617 compliant) | ✅ Fixed |
+| 6 | 🟡 Medium | `webhook.ts` | Pengecekan `inboxId === undefined \|\| inboxId === null` (bukan falsy) | ✅ Fixed |
+| 7 | 🔴 Critical | `webhook.ts` | `AbortController` dengan timeout `FETCH_TIMEOUT_MS` (default 10s) | ✅ Fixed |
+| 8 | 🟡 Medium | `Dockerfile` | `tsc` build + `node dist/index.js` — tidak lagi bergantung pada `tsx` di production | ✅ Fixed |
+| 9 | 🔴 Critical | `Dockerfile` | `entrypoint.sh` menjalankan `prisma migrate deploy` setiap container start | ✅ Fixed |
+| 10 | 🟡 Medium | `admin.ts` | `escapeJs` dihapus, data disimpan di `data-*` attributes (tidak ada inline JS escaping) | ✅ Fixed |
+| M1 | ⚠️ Minor | `webhook.ts` | `bodyLimit` middleware 1MB pada endpoint `/webhook` | ✅ Fixed |
+| M2 | ⚠️ Minor | `Dockerfile` + `package.json` | `npm run build` + `npm start` kini digunakan di Docker workflow | ✅ Fixed |
 
 ---
 
@@ -734,4 +736,4 @@ MIT License — lihat file [LICENSE](./LICENSE) untuk detail.
 
 ---
 
-*Dokumentasi ini dibuat berdasarkan analisis kode Chatgowa. Pastikan semua bug di atas diperbaiki sebelum deployment ke production.*
+*Dokumentasi ini dibuat berdasarkan analisis kode Chatgowa.*

@@ -8,6 +8,10 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  // Note: `url` is intentionally absent here. With Prisma 7 driver adapters,
+  // the connection URL is configured exclusively via prisma.config.ts
+  // (datasource.url) for migrations, and via the PrismaBetterSqlite3 adapter
+  // in src/lib/prisma.ts for runtime queries.
 }
 
 model WebhookRoute {

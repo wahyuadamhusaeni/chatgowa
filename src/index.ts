@@ -1,8 +1,8 @@
 import 'dotenv/config'
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
-import { webhookRoute } from './routes/webhook'
-import { adminRoute } from './routes/admin'
+import { webhookRoute } from './routes/webhook.js'
+import { adminRoute } from './routes/admin.js'
 
 const app = new Hono()
 

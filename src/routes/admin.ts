@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { prisma } from '../lib/prisma'
-import { basicAuth } from '../middleware/basicAuth'
+import { prisma } from '../lib/prisma.js'
+import { basicAuth } from '../middleware/basicAuth.js'
 
 export const adminRoute = new Hono()
 
@@ -127,17 +127,6 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;')
 }
 
-// Escape JavaScript string
-function escapeJs(str: string): string {
-  return str
-    .replace(/\\/g, '\\\\')
-    .replace(/'/g, "\\'")
-    .replace(/"/g, '\\"')
-    .replace(/`/g, '\\`')
-    .replace(/\n/g, '\\n')
-    .replace(/\r/g, '\\r')
-}
-
 function getAdminHtml(): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -215,6 +204,11 @@ function getAdminHtml(): string {
   </div>
 
   <script>
+    // BUG FIX: Replaced manual escapeJs() with a data-attribute approach.
+    // Storing route data in data-* attributes avoids all JS string escaping
+    // issues (backslash double-escaping, backtick, quotes, XSS via onclick).
+    // Data is read back via dataset in editRoute(), which is always safe.
+
     function escapeHtml(str) {
       if (!str) return '';
       return str
@@ -223,15 +217,6 @@ function getAdminHtml(): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-    }
-
-    function escapeJs(str) {
-      if (!str) return '';
-      return str
-        .replace(/\\\\/g, '\\\\\\\\')
-        .replace(/'/g, "\\\\'")
-        .replace(/"/g, '\\\\"')
-        .replace(/\`/g, '\\\\\`');
     }
 
     async function loadRoutes() {
@@ -247,8 +232,8 @@ function getAdminHtml(): string {
         }
 
         tbody.innerHTML = data.routes.map(r => {
-          const safeName = escapeJs(r.name || '');
-          const safeUrl = escapeJs(r.webhookUrl);
+          // Store raw values in data-* attributes — no JS string escaping needed.
+          // escapeHtml is used only for display text and HTML attribute values.
           return \`
             <tr>
               <td>\${r.id}</td>
@@ -256,8 +241,15 @@ function getAdminHtml(): string {
               <td>\${escapeHtml(r.name) || '-'}</td>
               <td class="url-cell" title="\${escapeHtml(r.webhookUrl)}">\${escapeHtml(r.webhookUrl)}</td>
               <td class="actions">
-                <button class="btn-edit" onclick="editRoute(\${r.id}, \${r.inboxId}, '\${safeName}', '\${safeUrl}')">Edit</button>
-                <button class="btn-delete" onclick="deleteRoute(\${r.id})">Delete</button>
+                <button class="btn-edit"
+                  data-id="\${r.id}"
+                  data-inbox-id="\${r.inboxId}"
+                  data-name="\${escapeHtml(r.name || '')}"
+                  data-webhook-url="\${escapeHtml(r.webhookUrl)}"
+                  onclick="editRoute(this)">Edit</button>
+                <button class="btn-delete"
+                  data-id="\${r.id}"
+                  onclick="deleteRoute(this)">Delete</button>
               </td>
             </tr>
           \`;
@@ -275,7 +267,13 @@ function getAdminHtml(): string {
       document.getElementById('addForm').classList.remove('hidden');
     }
 
-    function editRoute(id, inboxId, name, webhookUrl) {
+    function editRoute(btn) {
+      // Read raw values from data-* attributes — safe against any special chars
+      const id = btn.dataset.id;
+      const inboxId = btn.dataset.inboxId;
+      const name = btn.dataset.name;
+      const webhookUrl = btn.dataset.webhookUrl;
+
       document.getElementById('formTitle').textContent = 'Edit Route';
       document.getElementById('routeId').value = id;
       document.getElementById('inboxId').value = inboxId;
@@ -327,7 +325,8 @@ function getAdminHtml(): string {
       }
     }
 
-    async function deleteRoute(id) {
+    async function deleteRoute(btn) {
+      const id = btn.dataset.id;
       if (!confirm('Are you sure you want to delete this route?')) return;
 
       try {

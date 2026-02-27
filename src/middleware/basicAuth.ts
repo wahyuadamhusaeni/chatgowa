@@ -24,10 +24,24 @@ export const basicAuth = async (c: Context, next: Next) => {
   }
 
   const decoded = atob(credentials)
-  const [username, password] = decoded.split(':')
+
+  // BUG FIX: Use indexOf+slice instead of split(':') so passwords containing
+  // ':' are not truncated (RFC 7617 — only the FIRST colon is the separator)
+  const colonIndex = decoded.indexOf(':')
+  if (colonIndex === -1) {
+    return new Response(null, {
+      status: 401,
+      headers: {
+        'WWW-Authenticate': 'Basic realm="Chatgowa Admin"'
+      }
+    })
+  }
+  const username = decoded.slice(0, colonIndex)
+  const password = decoded.slice(colonIndex + 1)
 
   const validUser = process.env.BASIC_AUTH_USER || 'admin'
-  const validPass = process.env.BASIC_AUTH_PASS || 'password'
+  // BUG FIX: Default matches .env.example and docker-compose.yml default
+  const validPass = process.env.BASIC_AUTH_PASS || 'yourpassword'
 
   if (username !== validUser || password !== validPass) {
     return new Response(null, {
