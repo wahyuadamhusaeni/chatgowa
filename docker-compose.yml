@@ -1,0 +1,25 @@
+services:
+  chatgowa:
+    build: .
+    container_name: chatgowa
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-admin}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-yourpassword}
+      - DATABASE_URL=file:/app/prisma/dev.db
+    volumes:
+      # Persist only the SQLite database file
+      - chatgowa-db:/app/prisma
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  chatgowa-db:
+    driver: local
