@@ -83,7 +83,7 @@ chatgowa/
 
 ```bash
 # Clone dan masuk ke direktori
-git clone <repo-url>
+git clone https://github.com/wahyuadamhusaeni/chatgowa
 cd chatgowa
 
 # Install dependencies
