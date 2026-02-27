@@ -30,10 +30,15 @@ adminRoute.post('/routes', async (c) => {
     return c.json({ error: 'inboxId and webhookUrl are required' }, 400)
   }
 
+  const parsedInboxId = parseInt(inboxId)
+  if (isNaN(parsedInboxId)) {
+    return c.json({ error: 'inboxId must be a valid number' }, 400)
+  }
+
   try {
     const route = await prisma.webhookRoute.create({
       data: {
-        inboxId: parseInt(inboxId),
+        inboxId: parsedInboxId,
         webhookUrl,
         name: name || null
       }
@@ -43,6 +48,7 @@ adminRoute.post('/routes', async (c) => {
     if (error.code === 'P2002') {
       return c.json({ error: 'Route with this inboxId already exists' }, 409)
     }
+    console.error('Create route error:', error)
     return c.json({ error: 'Failed to create route' }, 500)
   }
 })
@@ -50,24 +56,42 @@ adminRoute.post('/routes', async (c) => {
 // Update route
 adminRoute.put('/routes/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
-  const body = await c.req.json()
+  if (isNaN(id)) {
+    return c.json({ error: 'Invalid route ID' }, 400)
+  }
 
+  const body = await c.req.json()
   const { inboxId, webhookUrl, name } = body
+
+  const updateData: any = {}
+
+  if (inboxId !== undefined) {
+    const parsedInboxId = parseInt(inboxId)
+    if (isNaN(parsedInboxId)) {
+      return c.json({ error: 'inboxId must be a valid number' }, 400)
+    }
+    updateData.inboxId = parsedInboxId
+  }
+
+  if (webhookUrl !== undefined) {
+    updateData.webhookUrl = webhookUrl
+  }
+
+  if (name !== undefined) {
+    updateData.name = name || null
+  }
 
   try {
     const route = await prisma.webhookRoute.update({
       where: { id },
-      data: {
-        inboxId: inboxId !== undefined ? parseInt(inboxId) : undefined,
-        webhookUrl: webhookUrl !== undefined ? webhookUrl : undefined,
-        name: name !== undefined ? name : undefined
-      }
+      data: updateData
     })
     return c.json({ route })
   } catch (error: any) {
     if (error.code === 'P2025') {
       return c.json({ error: 'Route not found' }, 404)
     }
+    console.error('Update route error:', error)
     return c.json({ error: 'Failed to update route' }, 500)
   }
 })
@@ -75,6 +99,9 @@ adminRoute.put('/routes/:id', async (c) => {
 // Delete route
 adminRoute.delete('/routes/:id', async (c) => {
   const id = parseInt(c.req.param('id'))
+  if (isNaN(id)) {
+    return c.json({ error: 'Invalid route ID' }, 400)
+  }
 
   try {
     await prisma.webhookRoute.delete({
@@ -85,9 +112,31 @@ adminRoute.delete('/routes/:id', async (c) => {
     if (error.code === 'P2025') {
       return c.json({ error: 'Route not found' }, 404)
     }
+    console.error('Delete route error:', error)
     return c.json({ error: 'Failed to delete route' }, 500)
   }
 })
+
+// Escape HTML to prevent XSS
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// Escape JavaScript string
+function escapeJs(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/`/g, '\\`')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+}
 
 function getAdminHtml(): string {
   return `<!DOCTYPE html>
@@ -118,6 +167,7 @@ function getAdminHtml(): string {
     .actions { display: flex; gap: 5px; }
     .hidden { display: none; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .url-cell { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -133,15 +183,15 @@ function getAdminHtml(): string {
         <input type="hidden" id="routeId">
         <div class="form-group">
           <label for="inboxId">Inbox ID</label>
-          <input type="number" id="inboxId" required>
+          <input type="number" id="inboxId" required min="1">
         </div>
         <div class="form-group">
           <label for="name">Name (optional)</label>
-          <input type="text" id="name" placeholder="e.g., Gowa A">
+          <input type="text" id="name" placeholder="e.g., Gowa A" maxlength="100">
         </div>
         <div class="form-group">
           <label for="webhookUrl">Webhook URL</label>
-          <input type="url" id="webhookUrl" required placeholder="https://example.com/api/webhook">
+          <input type="url" id="webhookUrl" required placeholder="https://example.com/api/webhook" maxlength="500">
         </div>
         <button type="submit" class="btn-primary">Save</button>
         <button type="button" onclick="hideForm()">Cancel</button>
@@ -165,22 +215,57 @@ function getAdminHtml(): string {
   </div>
 
   <script>
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function escapeJs(str) {
+      if (!str) return '';
+      return str
+        .replace(/\\\\/g, '\\\\\\\\')
+        .replace(/'/g, "\\\\'")
+        .replace(/"/g, '\\\\"')
+        .replace(/\`/g, '\\\\\`');
+    }
+
     async function loadRoutes() {
-      const res = await fetch('/admin/routes');
-      const data = await res.json();
-      const tbody = document.getElementById('routesTable');
-      tbody.innerHTML = data.routes.map(r => \`
-        <tr>
-          <td>\${r.id}</td>
-          <td>\${r.inboxId}</td>
-          <td>\${r.name || '-'}</td>
-          <td>\${r.webhookUrl}</td>
-          <td class="actions">
-            <button class="btn-edit" onclick="editRoute(\${r.id}, \${r.inboxId}, '\${r.name || ''}', '\${r.webhookUrl}')">Edit</button>
-            <button class="btn-delete" onclick="deleteRoute(\${r.id})">Delete</button>
-          </td>
-        </tr>
-      \`).join('');
+      try {
+        const res = await fetch('/admin/routes');
+        if (!res.ok) throw new Error('Failed to load routes');
+        const data = await res.json();
+        const tbody = document.getElementById('routesTable');
+
+        if (data.routes.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">No routes configured</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.routes.map(r => {
+          const safeName = escapeJs(r.name || '');
+          const safeUrl = escapeJs(r.webhookUrl);
+          return \`
+            <tr>
+              <td>\${r.id}</td>
+              <td>\${r.inboxId}</td>
+              <td>\${escapeHtml(r.name) || '-'}</td>
+              <td class="url-cell" title="\${escapeHtml(r.webhookUrl)}">\${escapeHtml(r.webhookUrl)}</td>
+              <td class="actions">
+                <button class="btn-edit" onclick="editRoute(\${r.id}, \${r.inboxId}, '\${safeName}', '\${safeUrl}')">Edit</button>
+                <button class="btn-delete" onclick="deleteRoute(\${r.id})">Delete</button>
+              </td>
+            </tr>
+          \`;
+        }).join('');
+      } catch (error) {
+        console.error('Load routes error:', error);
+        alert('Failed to load routes');
+      }
     }
 
     function showAddForm() {
@@ -206,39 +291,56 @@ function getAdminHtml(): string {
     async function saveRoute(e) {
       e.preventDefault();
       const id = document.getElementById('routeId').value;
+      const inboxIdValue = document.getElementById('inboxId').value;
+
+      if (!inboxIdValue || isNaN(parseInt(inboxIdValue))) {
+        alert('Please enter a valid Inbox ID');
+        return;
+      }
+
       const data = {
-        inboxId: parseInt(document.getElementById('inboxId').value),
-        name: document.getElementById('name').value || null,
-        webhookUrl: document.getElementById('webhookUrl').value
+        inboxId: parseInt(inboxIdValue),
+        name: document.getElementById('name').value.trim() || null,
+        webhookUrl: document.getElementById('webhookUrl').value.trim()
       };
 
       const url = id ? \`/admin/routes/\${id}\` : '/admin/routes';
       const method = id ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      try {
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
 
-      if (res.ok) {
-        hideForm();
-        loadRoutes();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Failed to save route');
+        if (res.ok) {
+          hideForm();
+          loadRoutes();
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to save route');
+        }
+      } catch (error) {
+        console.error('Save route error:', error);
+        alert('Failed to save route');
       }
     }
 
     async function deleteRoute(id) {
       if (!confirm('Are you sure you want to delete this route?')) return;
 
-      const res = await fetch(\`/admin/routes/\${id}\`, { method: 'DELETE' });
-      if (res.ok) {
-        loadRoutes();
-      } else {
-        const err = await res.json();
-        alert(err.error || 'Failed to delete route');
+      try {
+        const res = await fetch(\`/admin/routes/\${id}\`, { method: 'DELETE' });
+        if (res.ok) {
+          loadRoutes();
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to delete route');
+        }
+      } catch (error) {
+        console.error('Delete route error:', error);
+        alert('Failed to delete route');
       }
     }
 

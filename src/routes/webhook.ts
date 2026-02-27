@@ -15,6 +15,12 @@ webhookRoute.post('/', async (c) => {
       return c.json({ received: true }, 200)
     }
 
+    // Validate inboxId is a number
+    if (typeof inboxId !== 'number') {
+      console.warn(`Invalid inbox_id type: ${typeof inboxId}`)
+      return c.json({ received: true }, 200)
+    }
+
     // Look up route by inbox_id
     const route = await prisma.webhookRoute.findUnique({
       where: { inboxId: inboxId }
@@ -35,12 +41,12 @@ webhookRoute.post('/', async (c) => {
     })
 
     if (!response.ok) {
-      console.error(`Forward failed: ${response.status} ${response.statusText}`)
+      console.error(`Forward failed to ${route.webhookUrl}: ${response.status} ${response.statusText}`)
     }
 
     return c.json({ received: true, forwarded: true }, 200)
   } catch (error) {
-    console.error('Webhook error:', error)
+    console.error('Webhook error:', error instanceof Error ? error.message : error)
     // Still return 200 to avoid Chatwoot retries
     return c.json({ received: true }, 200)
   }
