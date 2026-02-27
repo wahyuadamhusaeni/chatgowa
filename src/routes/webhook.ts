@@ -1,7 +1,14 @@
 import { Hono } from 'hono'
-import { prisma } from '../lib/prisma'
+import { bodyLimit } from 'hono/body-limit'
+import { prisma } from '../lib/prisma.js'
 
 export const webhookRoute = new Hono()
+
+// M1 FIX: Limit body size to 1MB to prevent DoS via large payloads
+webhookRoute.use('/', bodyLimit({
+  maxSize: 1 * 1024 * 1024, // 1 MB
+  onError: (c) => c.json({ error: 'Payload too large' }, 413)
+}))
 
 webhookRoute.post('/', async (c) => {
   try {
@@ -10,8 +17,9 @@ webhookRoute.post('/', async (c) => {
     // Extract inbox_id from payload
     const inboxId = body.inbox_id
 
-    if (!inboxId) {
-      // Return 200 OK even without inbox_id (silent ignore)
+    // BUG FIX: Use explicit null/undefined check instead of falsy check.
+    // inbox_id = 0 is falsy in JS but may be a valid value — do not silent-drop it.
+    if (inboxId === undefined || inboxId === null) {
       return c.json({ received: true }, 200)
     }
 
@@ -31,17 +39,34 @@ webhookRoute.post('/', async (c) => {
       return c.json({ received: true }, 200)
     }
 
-    // Forward payload to target webhook URL
-    const response = await fetch(route.webhookUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    })
+    // BUG FIX: Add timeout via AbortController so a slow/unresponsive GoWA
+    // instance does not block indefinitely, preventing Chatwoot retries and
+    // memory accumulation from hung fetch promises.
+    const timeoutMs = parseInt(process.env.FETCH_TIMEOUT_MS || '10000')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
 
-    if (!response.ok) {
-      console.error(`Forward failed to ${route.webhookUrl}: ${response.status} ${response.statusText}`)
+    try {
+      const response = await fetch(route.webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      })
+
+      if (!response.ok) {
+        console.error(`Forward failed to ${route.webhookUrl}: ${response.status} ${response.statusText}`)
+      }
+    } catch (fetchError) {
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.error(`Forward timeout after ${timeoutMs}ms to ${route.webhookUrl}`)
+      } else {
+        console.error(`Forward error to ${route.webhookUrl}:`, fetchError instanceof Error ? fetchError.message : fetchError)
+      }
+    } finally {
+      clearTimeout(timer)
     }
 
     return c.json({ received: true, forwarded: true }, 200)
