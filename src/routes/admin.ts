@@ -17,6 +17,7 @@ adminRoute.get('/routes', async (c) => {
   const routes = await prisma.webhookRoute.findMany({
     orderBy: { createdAt: 'desc' }
   })
+  console.log(`[ADMIN] List routes — total=${routes.length}`)
   return c.json({ routes })
 })
 
@@ -43,12 +44,14 @@ adminRoute.post('/routes', async (c) => {
         name: name || null
       }
     })
+    console.log(`[ADMIN] Created route id=${route.id} inboxId=${route.inboxId} name="${route.name ?? ''}" url="${route.webhookUrl}"`)
     return c.json({ route }, 201)
   } catch (error: any) {
     if (error.code === 'P2002') {
+      console.warn(`[ADMIN] Create route conflict: inboxId=${parsedInboxId} already exists`)
       return c.json({ error: 'Route with this inboxId already exists' }, 409)
     }
-    console.error('Create route error:', error)
+    console.error('[ADMIN] Create route error:', error)
     return c.json({ error: 'Failed to create route' }, 500)
   }
 })
@@ -86,12 +89,14 @@ adminRoute.put('/routes/:id', async (c) => {
       where: { id },
       data: updateData
     })
+    console.log(`[ADMIN] Updated route id=${route.id} inboxId=${route.inboxId} name="${route.name ?? ''}" url="${route.webhookUrl}"`)
     return c.json({ route })
   } catch (error: any) {
     if (error.code === 'P2025') {
+      console.warn(`[ADMIN] Update route not found: id=${id}`)
       return c.json({ error: 'Route not found' }, 404)
     }
-    console.error('Update route error:', error)
+    console.error('[ADMIN] Update route error:', error)
     return c.json({ error: 'Failed to update route' }, 500)
   }
 })
@@ -107,12 +112,14 @@ adminRoute.delete('/routes/:id', async (c) => {
     await prisma.webhookRoute.delete({
       where: { id }
     })
+    console.log(`[ADMIN] Deleted route id=${id}`)
     return c.json({ success: true })
   } catch (error: any) {
     if (error.code === 'P2025') {
+      console.warn(`[ADMIN] Delete route not found: id=${id}`)
       return c.json({ error: 'Route not found' }, 404)
     }
-    console.error('Delete route error:', error)
+    console.error('[ADMIN] Delete route error:', error)
     return c.json({ error: 'Failed to delete route' }, 500)
   }
 })
